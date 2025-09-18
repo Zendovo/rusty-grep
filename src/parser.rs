@@ -3,7 +3,7 @@
 // Minimal AST for the features we support: concat, alternation, ?, +, anchors, ., \d, \w, classes, literals
 pub enum RegexNode {
     Seq(Vec<RegexNode>),
-    Alt(Vec<RegexNode>),
+    Alt(Vec<RegexNode>), // bool indicates if it's a capturing group
     Repeat {
         node: Box<RegexNode>,
         kind: RepeatKind,
@@ -18,6 +18,11 @@ pub enum RegexNode {
         negated: bool,
     },
     Literal(char),
+    Backreference(usize),
+    Group {
+        group_num: usize,
+        node: Box<RegexNode>,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -36,12 +41,13 @@ pub enum RepeatKind {
 pub struct Parser<'a> {
     pattern: &'a str,
     pos: usize,
+    ref_count: usize,
 }
 
 impl<'a> Parser<'a> {
     // Create a new parser for the given pattern
     pub fn new(pattern: &'a str) -> Self {
-        Self { pattern, pos: 0 }
+        Self { pattern, pos: 0, ref_count: 0 }
     }
 
     // Peek at the current character without advancing
@@ -128,15 +134,20 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // Parse atom: atom := '(' alt ')' | '[' '^'? class ']' | '\\' esc | '.' | '^' | '$' | literal
+    // Parse atom: atom := '(' alt ')' | '[' '^'? class ']' | '\' esc | '.' | '^' | '$' | literal
     fn parse_atom(&mut self) -> RegexNode {
         match self.peek() {
             // Parenthesized group
             Some('(') => {
                 self.advance();
+                self.ref_count += 1;
+                let group_num = self.ref_count;
                 let node = self.parse_alt();
                 let _ = self.expect(')');
-                node
+                RegexNode::Group {
+                    group_num,
+                    node: Box::new(node),
+                }
             }
             // Character class
             Some('[') => self.parse_char_class(),
@@ -146,6 +157,22 @@ impl<'a> Parser<'a> {
                 match self.advance() {
                     Some('d') => RegexNode::Digit,
                     Some('w') => RegexNode::Word,
+                    // if digit, then backreference
+                    Some(c) if c.is_digit(10) => {
+                        // advance till you find non-digit
+                        let mut val: usize = c.to_digit(10).unwrap() as usize;
+                        while let Some(d) = self.peek().and_then(|ch| ch.to_digit(10)) {
+                            self.advance();
+                            val = val * 10 + d as usize;
+                        }
+
+                        if val > self.ref_count || val == 0 {
+                            // Invalid backreference, treat as literal
+                            RegexNode::Literal('\\')
+                        } else {
+                            RegexNode::Backreference(val)
+                        }
+                    }
                     Some(c) => RegexNode::Literal(c),
                     None => RegexNode::Literal('\\'),
                 }
