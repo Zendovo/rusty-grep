@@ -78,28 +78,73 @@ Contains the command-line interface and main application logic.
 
 ## Supported Regex Features
 
-- **Literals**: Basic character matching
-- **Wildcard (`.`)**: Matches any character
-- **Anchors**: 
   - `^` - Start of string
   - `$` - End of string
-- **Character Classes**: 
   - `[abc]` - Matches any of a, b, or c
   - `[^abc]` - Matches any character except a, b, or c
-- **Escape Sequences**:
   - `\d` - Matches digits (0-9)
   - `\w` - Matches word characters (alphanumeric + underscore)
-- **Quantifiers**:
   - `?` - Zero or one occurrence
   - `+` - One or more occurrences
   - `*` - Zero or more occurrences
-- **Alternation**: `|` - Matches either left or right alternative
-- **Grouping**: `()` - Groups expressions together
+### Backreferencing Support
+
+- **Backreferencing**: `\1`, `\2`, ... - Matches the same text as previously captured group. Supports nested and recursive backreferences.
+
+#### Implementation Details
+
+- The parser annotates each capturing group with a unique group number in the AST.
+- During matching, the engine tracks the start and end positions of each group for every match path.
+- When a backreference (e.g., `\1`) is encountered, the matcher checks if the referenced group was matched and compares the current input with the captured substring.
+- This supports nested and recursive backreferences, as group maps are cloned and tracked per match path.
+
+Example:
+```bash
+echo "foo bar foo" | ./your_program.sh -E "(foo) bar \1"
+# Matches: 'foo bar foo'
+```
+
+### File Input (Multiple Files)
+
+You can pass one or more files as arguments. The program will process each file line by line and print matching lines:
+
+```bash
+./your_program.sh -E "pattern" file1.txt file2.txt
+```
+
+### Recursive Directory Search
+
+Use the `-r` flag to search through a directory and its subdirectories recursively. Each matching line is printed with a `<filename>:` prefix:
+
+```bash
+./your_program.sh -r -E "pattern" dir/
+```
+
+Example:
+```bash
+$ mkdir -p dir/subdir
+$ echo "pear" > dir/fruits.txt
+$ echo "strawberry" >> dir/fruits.txt
+$ echo "celery" > dir/subdir/vegetables.txt
+$ echo "carrot" >> dir/subdir/vegetables.txt
+$ echo "cucumber" > dir/vegetables.txt
+$ echo "corn" >> dir/vegetables.txt
+
+# Find lines ending with 'er'
+$ ./your_program.sh -r -E ".*er" dir/
 
 ## Algorithm Details
 
+
+# Find lines ending with 'ar'
+$ ./your_program.sh -r -E ".*ar" dir/
 The implementation uses a **backtracking-based approach** with position tracking:
 
+
+# No matches
+$ ./your_program.sh -r -E "missing_fruit" dir/
+# (prints nothing, exits with code 1)
+```
 1. **Parsing**: The input regex pattern is parsed into an AST using recursive descent
 2. **Matching**: The matcher tries to find matches at every possible starting position
 3. **Position Tracking**: Each match operation returns a vector of possible end positions, allowing for non-deterministic matching
@@ -154,4 +199,5 @@ src/
 ├── main.rs      # CLI interface and main application logic
 ├── parser.rs    # Regex parser and AST definitions
 └── matcher.rs   # Pattern matching engine
+├── cli.rs       # Argument parsing and CLI flags
 ```
