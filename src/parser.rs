@@ -3,7 +3,7 @@
 // Minimal AST for the features we support: concat, alternation, ?, +, anchors, ., \d, \w, classes, literals
 pub enum RegexNode {
     Seq(Vec<RegexNode>),
-    Alt(Vec<RegexNode>), // bool indicates if it's a capturing group
+    Alt(Vec<RegexNode>),
     Repeat {
         node: Box<RegexNode>,
         kind: RepeatKind,

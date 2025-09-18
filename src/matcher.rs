@@ -8,7 +8,6 @@ pub fn match_node(
     node: &RegexNode,
     input: &[char],
     pos: usize,
-    last_group: &mut usize,
     groups: &mut HashMap<usize, (usize, usize)>,
 ) -> Vec<usize> {
     match node {
@@ -16,7 +15,7 @@ pub fn match_node(
             // Save the start position, match the inner node, and save the end position for each successful match
             let mut results = Vec::new();
             let mut local_groups = groups.clone();
-            let ends = match_node(inner, input, pos, last_group, &mut local_groups);
+            let ends = match_node(inner, input, pos, &mut local_groups);
             for end in ends {
                 let mut branch_groups = local_groups.clone();
                 branch_groups.insert(*group_num, (pos, end));
@@ -87,7 +86,7 @@ pub fn match_node(
             for n in nodes {
                 let mut next_positions = Vec::new();
                 for p in positions {
-                    let res = match_node(n, input, p, last_group, groups);
+                    let res = match_node(n, input, p, groups);
                     next_positions.extend(res);
                 }
                 if next_positions.is_empty() {
@@ -104,7 +103,7 @@ pub fn match_node(
             let mut all_groups: Vec<HashMap<usize, (usize, usize)>> = Vec::new();
             for br in branches {
                 let mut branch_groups = groups.clone();
-                let res = match_node(br, input, pos, last_group, &mut branch_groups);
+                let res = match_node(br, input, pos, &mut branch_groups);
                 if !res.is_empty() {
                     all_positions.extend(res.iter().copied());
                     all_groups.push(branch_groups);
@@ -136,7 +135,7 @@ pub fn match_node(
             RepeatKind::ZeroOrOne => {
                 // Either skip it or take one
                 let mut positions = vec![pos];
-                positions.extend(match_node(inner, input, pos, last_group, groups));
+                positions.extend(match_node(inner, input, pos, groups));
                 positions.sort_unstable();
                 positions.dedup();
                 positions
@@ -144,7 +143,7 @@ pub fn match_node(
             RepeatKind::OneOrMore => {
                 // Keep applying `inner` as long as we can, collecting all positions
                 let mut results = Vec::new();
-                let mut frontier = match_node(inner, input, pos, last_group, groups);
+                let mut frontier = match_node(inner, input, pos, groups);
                 while !frontier.is_empty() {
                     for p in &frontier {
                         if !results.contains(p) {
@@ -154,7 +153,7 @@ pub fn match_node(
                     // Advance one more repetition from each frontier point
                     let mut next = Vec::new();
                     for p in &frontier {
-                        let step = match_node(inner, input, *p, last_group, groups);
+                        let step = match_node(inner, input, *p, groups);
                         next.extend(step);
                     }
                     next.sort_unstable();
@@ -169,7 +168,7 @@ pub fn match_node(
                 // Keep the current position as a valid match (zero occurrences)
                 let mut results = vec![pos];
                 // First occurrence
-                let mut frontier = match_node(inner, input, pos, last_group, groups);
+                let mut frontier = match_node(inner, input, pos, groups);
                 while !frontier.is_empty() {
                     for p in &frontier {
                         if !results.contains(&p) {
@@ -178,7 +177,7 @@ pub fn match_node(
                     }
                     let mut next: Vec<usize> = Vec::new();
                     for p in &frontier {
-                        let step = match_node(inner, input, *p, last_group, groups);
+                        let step = match_node(inner, input, *p, groups);
                         next.extend(step);
                     }
                     next.sort_unstable();
@@ -200,8 +199,7 @@ pub fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let input_chars: Vec<char> = input_line.chars().collect();
     for start in 0..=input_chars.len() {
         let mut groups: HashMap<usize, (usize, usize)> = HashMap::new();
-        let mut last_group = 0;
-        if !match_node(&ast, &input_chars, start, &mut last_group, &mut groups).is_empty() {
+        if !match_node(&ast, &input_chars, start, &mut groups).is_empty() {
             return true;
         }
     }
